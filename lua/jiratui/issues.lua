@@ -1,4 +1,4 @@
--- jiratui/issues.lua
+-- lua/jiratui/issues.lua
 local M = {}
 
 local rest_adapter = require("jiratui.rest")

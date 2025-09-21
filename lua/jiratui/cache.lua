@@ -1,4 +1,4 @@
--- jiratui/cache.lua
+-- lua/jiratui/cache.lua
 local M = {}
 
 local uv = vim.uv or vim.loop

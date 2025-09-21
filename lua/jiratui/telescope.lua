@@ -1,4 +1,4 @@
--- jiratui/telescope.lua
+-- lua/jiratui/telescope.lua
 local M = {}
 
 local telescope_ok = pcall(require, "telescope")
@@ -725,11 +725,9 @@ function M.pick(plugin_options)
               return
             end
 
-            local last_name = nil
             for _, issue in ipairs(targets) do
               local name, err = git.switch_to_issue_branch(issue, { create_if_missing = true })
               if name then
-                last_name = name
                 notify("Branch ready: " .. name)
               else
                 notify("Git: " .. (err or "unknown error"), vim.log.levels.ERROR)

@@ -1,4 +1,4 @@
--- jiratui/parser.lua
+-- lua/jiratui/parser.lua
 local M = {}
 
 local function shell_escape_arg(s)

@@ -1,4 +1,4 @@
--- jiratui/git.lua
+-- lua/jiratui/git.lua
 local M = {}
 
 local notify = require("jiratui.util").notify

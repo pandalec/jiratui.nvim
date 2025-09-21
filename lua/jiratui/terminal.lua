@@ -1,4 +1,4 @@
--- jiratui/terminal.lua
+-- lua/jiratui/terminal.lua
 local M = {}
 
 local Terminal = require("toggleterm.terminal").Terminal
@@ -32,12 +32,33 @@ function M.open_jiratui(key, project, jql_id)
 
   if current_term and current_term:is_open() then current_term:close() end
 
-  local float_opts = (opts.terminal and opts.terminal.float_opts) or { border = "rounded", title_pos = "center" }
+  local float_opts = (opts.terminal and opts.terminal.float_opts)
+    or {
+      border = "rounded",
+      title_pos = "center",
+    }
+
   current_term = Terminal:new({
     cmd = cmd,
     direction = "float",
     close_on_exit = true,
     float_opts = float_opts,
+
+    -- Workaround for entering insert mode
+    on_open = function(term)
+      local bufnr = term.bufnr or vim.api.nvim_get_current_buf()
+
+      vim.schedule(function()
+        for _, win in ipairs(vim.api.nvim_list_wins()) do
+          if vim.api.nvim_win_get_buf(win) == bufnr then
+            vim.api.nvim_set_current_win(win)
+            pcall(vim.cmd, "startinsert")
+            return
+          end
+        end
+        pcall(vim.cmd, "startinsert")
+      end)
+    end,
   })
 
   local ok = pcall(function() current_term:open() end)

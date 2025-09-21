@@ -1,4 +1,4 @@
--- jiratui/util.lua
+-- lua/jiratui/util.lua
 local M = {}
 
 function M.notify(msg, level) vim.notify("[jiratui.nvim] " .. tostring(msg), level or vim.log.levels.INFO) end

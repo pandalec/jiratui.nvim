@@ -1,4 +1,4 @@
--- jiratui/config.lua
+-- lua/jiratui/config.lua
 local M = {}
 
 local parser = require("jiratui.parser")

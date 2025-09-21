@@ -1,4 +1,4 @@
--- jiratui/health.lua
+-- lua/jiratui/health.lua
 local M = {}
 
 local config = require("jiratui.config")
