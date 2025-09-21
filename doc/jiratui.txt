@@ -66,8 +66,8 @@ Example keys (see jiratui README for full schema):
         label: "My Open Issues"
         expression: 'assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC'
       "20":
-        label: "Project ISY"
-        expression: 'project = "ISY" ORDER BY updated DESC'
+        label: "Project PROJ"
+        expression: 'project = "PROJ" ORDER BY updated DESC'
 
 Use the numeric or string id in |jiratui.nvim-setup| `filters.default_jql_id`.
 
@@ -78,7 +78,7 @@ SETUP OPTIONS                                                   *jiratui.nvim-se
 >lua
     require("jiratui").setup({
       filters = {
-        project = nil,         -- optional hard filter: "ISY"
+        project = nil,         -- optional hard filter: "PROJ"
         assignee = nil,        -- "me" or a Jira username
         status = nil,          -- e.g. { "In Progress", "Done" }
         default_jql_id = 10,   -- from jiratui YAML

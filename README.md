@@ -96,7 +96,7 @@ pre_defined_jql_expressions:
     expression: "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC"
   "20":
     label: "Team In Progress"
-    expression: 'project = "ISY" AND status in ("In Progress") ORDER BY updated DESC'
+    expression: 'project = "PROJ" AND status in ("In Progress") ORDER BY updated DESC'
 ```
 
 Set `default_jql_id` in your `setup()` to one of these ids (string or number).  
