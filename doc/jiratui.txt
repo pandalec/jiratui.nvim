@@ -1,0 +1,242 @@
+*jiratui.nvim*                              Telescope-powered Jira picker for Neovim
+
+==============================================================================
+INTRODUCTION                                                       *jiratui.nvim-intro*
+
+jiratui.nvim lets you browse, group, preview, and open Jira issues directly
+from Neovim using Telescope. It can optionally create/switch Git branches and
+craft commit messages from issues.
+
+IMPORTANT:
+- This plugin builds ON TOP OF the CLI tool:
+  https://github.com/whyisdifficult/jiratui
+- It REUSES the same configuration file as `jiratui` (credentials, predefined JQL).
+- You must have the `jiratui` CLI installed and configured.
+
+Status: pre-alpha (APIs and defaults may change).
+
+
+==============================================================================
+REQUIREMENTS                                                      *jiratui.nvim-req*
+
+- Neovim >= 0.10
+- telescope.nvim
+- plenary.nvim
+- toggleterm.nvim (for opening the external `jiratui` TUI)
+- curl (HTTP)
+- yq   (parse YAML used by `jiratui`)
+- jiratui (CLI) configured
+
+
+==============================================================================
+INSTALLATION                                                   *jiratui.nvim-install*
+
+Example (lazy.nvim):
+
+>lua
+    {
+      "pandalec/jiratui.nvim",
+      dependencies = {
+        "nvim-lua/plenary.nvim",
+        "nvim-telescope/telescope.nvim",
+        "akinsho/toggleterm.nvim",
+      },
+      config = function()
+        require("jiratui").setup({})
+      end,
+    }
+
+
+==============================================================================
+CONFIGURATION FILE (from jiratui CLI)                 *jiratui.nvim-jiratui-config*
+
+Search order:
+1. $JIRA_TUI_CONFIG_FILE
+2. $XDG_CONFIG_HOME/jiratui/config.yaml
+3. $HOME/.config/jiratui/config.yaml
+
+Example keys (see jiratui README for full schema):
+
+>yaml
+    jira_api_base_url: "https://your-company.atlassian.net"
+    jira_api_username: "you@example.com"
+    jira_api_token: "atlassian-token"
+    pre_defined_jql_expressions:
+      "10":
+        label: "My Open Issues"
+        expression: 'assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC'
+      "20":
+        label: "Project ISY"
+        expression: 'project = "ISY" ORDER BY updated DESC'
+
+Use the numeric or string id in |jiratui.nvim-setup| `filters.default_jql_id`.
+
+
+==============================================================================
+SETUP OPTIONS                                                   *jiratui.nvim-setup*
+
+>lua
+    require("jiratui").setup({
+      filters = {
+        project = nil,         -- optional hard filter: "ISY"
+        assignee = nil,        -- "me" or a Jira username
+        status = nil,          -- e.g. { "In Progress", "Done" }
+        default_jql_id = 10,   -- from jiratui YAML
+        max_results = 200,     -- -1 or >100 => fetch all pages
+      },
+      terminal = {
+        float_opts = FloatingTerminalOpts, -- passed to toggleterm
+      },
+      debug = false,           -- echo REST calls
+      cache = {
+        enabled = true,
+        ttl_minutes = 10,
+        background_refresh = true,
+      },
+      keymaps = true,
+      load_on_startup = true,
+      telescope = {
+        picker_fields = { "key", "summary", "status", "assignee", "fixVersions" },
+        preview_fields = { "description", "fixVersions" },
+        sort_by = "updated",
+        group_by = "none",     -- "none"|"status"|"assignee"|"type"|"customfield_XXXXX"
+        group_custom_fields = {
+          -- { id = "customfield_10094", name = "Components" },
+        },
+        show_group_headers = true,
+      },
+      git = {
+        enabled = true,
+        remote = "origin",
+        branch_template = "{key}-{slug}",
+        commit_template = "{key} {summary}",
+      },
+    })
+
+Notes:
+- `filters.max_results == -1` or `> 100` will page until all issues are fetched.
+- `fixVersions` is always treated as a list; list view shows first value or "first, ...".
+- Custom field labels in preview/group headers come from `telescope.group_custom_fields`.
+- Templates:
+    {key}     -> issue key (e.g. PROJ-123)
+    {slug}    -> url-safe lowercase summary (e.g. fix-login-timeout)
+    {summary} -> full summary text
+
+
+==============================================================================
+USAGE                                                           *jiratui.nvim-usage*
+
+Open picker (example keymap in |jiratui.nvim-install|).
+
+List view columns are controlled by `telescope.picker_fields`, e.g.:
+    { "key", "summary", "status", "assignee", "type", "priority", "fixVersions", "customfield_10094" }
+
+Preview content is controlled by `telescope.preview_fields`, e.g.:
+    { "description", "fixVersions", "customfield_10094", "customfield_10097" }
+
+ADF description is rendered as plain text.
+
+Built-in picker keymaps:
+    <CR>        Open external `jiratui` TUI (jiratui ui [-w <KEY>] [-p <project>] [-j <id>])
+    <C-o>       Open issue in browser
+    <C-r>       Refresh issues
+    <C-i>/<C-p> Toggle preview
+    ?           Toggle help overlay
+    <C-g>       Cycle grouping forward
+    <C-S-g>     Cycle grouping backward
+    <C-f>       Open value filter menu for CURRENT group (checkbox UI)
+    <C-b>       Create/Switch Git branch from selected issue (if Git enabled)
+
+Grouping:
+- `telescope.group_by` can be:
+    "none", "status", "assignee", "type", or any "customfield_XXXXX".
+- When grouping by a multi-value custom field, items are duplicated per value.
+
+Value filters (checkbox UI):
+- Press <C-f> to open a menu of current group values with counts.
+- Toggle entries (Space/Tab), press <CR> to apply.
+- Filters accumulate across groups (e.g. keep Status ∈ {In Progress, Todo} AND Component ∈ {X}).
+- Filters persist in memory for the current Neovim session.
+
+
+==============================================================================
+GIT INTEGRATION (OPTIONAL)                                    *jiratui.nvim-git*
+
+Enabled via `git.enabled = true`.
+
+API (require("jiratui.git")):
+>lua
+    local git = require("jiratui.git")
+    git.get_branch_name(issue)         -- string, from branch_template
+    git.get_commit_message(issue)      -- string, from commit_template
+    git.create_branch(issue)           -- ok, err
+    git.switch_branch(issue)           -- ok, err (uses local or remote/<remote>)
+    git.create_or_switch_branch(issue) -- ok, err
+
+From the picker: <C-b> creates/switches branch for the selected issue.
+
+Templates (see |jiratui.nvim-setup|):
+- branch_template: "{key}-{slug}"         -> "PROJ-123-fix-login-timeout"
+- commit_template: "{key} {summary}"      -> "PROJ-123 Fix login timeout under load"
+
+Remote:
+- `git.remote` (default "origin") is used to find remote branches.
+
+
+==============================================================================
+TERMINAL / EXTERNAL TUI                                  *jiratui.nvim-terminal*
+
+The picker uses ToggleTerm to run the external `jiratui` TUI:
+
+    jiratui ui [-w <KEY>] [-p <project>] [-j <jql_id>]
+
+You can also call:
+>lua
+    require("jiratui.terminal").open_jiratui(key, project, jql_id)
+
+
+==============================================================================
+HEALTHCHECK                                                *jiratui.nvim-health*
+
+Run:
+    :checkhealth jiratui
+
+Checks:
+- NVIM version
+- curl/yq
+- telescope/toggleterm presence
+- jiratui YAML path and parse
+- default_jql_id exists in YAML (if set)
+
+
+==============================================================================
+TROUBLESHOOTING                                        *jiratui.nvim-troubleshoot*
+
+Q: "default_jql_id N not found in pre_defined_jql_expressions"
+A: Ensure your jiratui YAML defines that id as a key (string or number).
+
+Q: "E5560: nvim_echo must not be called in a fast event context"
+A: If you add custom notifications, wrap with vim.schedule():
+>lua
+    vim.schedule(function()
+      require("jiratui.util").notify("message")
+    end)
+
+Q: Custom field column/preview is empty
+A: Ensure the customfield id appears in `telescope.picker_fields` (for list)
+   and/or `telescope.preview_fields` (for preview). For friendly names in
+   headers/labels, add to `telescope.group_custom_fields` with { id, name }.
+
+Q: Too many/few issues
+A: `filters.max_results = -1` (or any >100) fetches all pages. Otherwise the
+   result size is capped.
+
+
+==============================================================================
+CREDITS & LICENSE                                         *jiratui.nvim-credits*
+
+- Built on the excellent CLI tool: whyisdifficult/jiratui
+  https://github.com/whyisdifficult/jiratui
+- License: MIT (see repository)
+
+Contributions welcome — the plugin is pre-alpha; feedback is appreciated!
