@@ -75,7 +75,6 @@ function M.setup(user_options)
     vim.api.nvim_create_autocmd("VimEnter", {
       group = augroup_id,
       callback = function()
-        if want_notifications then notify("jiratui.nvim loaded", vim.log.levels.INFO) end
         if
           options.cache.enabled
           and options.cache.background_refresh
