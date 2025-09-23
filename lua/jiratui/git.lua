@@ -87,8 +87,18 @@ end
 
 function M.branch_exists_remote(branch, remote)
   remote = remote or get_opts().remote
-  local ok = system_git({ "ls-remote", "--heads", remote, branch })
+  -- Use --exit-code so a missing branch yields a non-zero exit
+  local ok = system_git({ "ls-remote", "--exit-code", "--heads", remote, branch })
   return ok
+end
+
+local function git_fetch(remote) system_git({ "fetch", "--prune", remote }) end
+
+local function remote_default_head(remote)
+  -- returns e.g. "origin/main" or nil
+  local ok, out = system_git({ "symbolic-ref", "--short", "refs/remotes/" .. remote .. "/HEAD" })
+  if ok and out ~= "" then return out end
+  return nil
 end
 
 local function git_switch(branch)
@@ -153,7 +163,7 @@ end
 --   template: override branch template
 --   remote: override remote name
 --   create_if_missing: boolean (default: true)
---   base: base ref for creation (default: current HEAD)
+--   base: base ref for creation (default: remote HEAD or current HEAD)
 function M.switch_to_issue_branch(issue, opts)
   opts = opts or {}
   if not M.is_enabled() then return nil, "git disabled or not available" end
@@ -163,19 +173,24 @@ function M.switch_to_issue_branch(issue, opts)
 
   if M.branch_exists_local(name) then
     local ok, _, err = git_switch(name)
-    if not ok then return nil, "failed to switch to branch: " .. err end
+    if not ok then return nil, "failed to switch to branch: " .. (err or "") end
     return name, nil
   end
 
+  -- refresh remotes before checking
+  git_fetch(remote)
+
   if M.branch_exists_remote(name, remote) then
     local ok, _, err = git_switch_track(name, remote)
-    if not ok then return nil, "failed to create tracking branch: " .. err end
+    if not ok then return nil, "failed to create tracking branch: " .. (err or "") end
     return name, nil
   end
 
   if opts.create_if_missing ~= false then
-    local ok, _, err = git_create_branch(name, opts.base)
-    if not ok then return nil, "failed to create branch: " .. err end
+    local base = opts.base
+    if not base or base == "" then base = remote_default_head(remote) end
+    local ok, _, err = git_create_branch(name, base)
+    if not ok then return nil, "failed to create branch: " .. (err or "") end
     return name, nil
   end
 
@@ -183,14 +198,18 @@ function M.switch_to_issue_branch(issue, opts)
 end
 
 -- Create a new branch (without switching) based on issue
--- opts: template, base
+-- opts: template, base, remote
 function M.create_issue_branch(issue, opts)
   opts = opts or {}
   if not M.is_enabled() then return nil, "git disabled or not available" end
+  local o = get_opts()
+  local remote = opts.remote or o.remote
   local name = M.compute_branch_name(issue, opts.template)
   if M.branch_exists_local(name) then return name, nil end
-  local ok, _, err = git_create_branch(name, opts.base)
-  if not ok then return nil, "failed to create branch: " .. err end
+  local base = opts.base
+  if not base or base == "" then base = remote_default_head(remote) end
+  local ok, _, err = git_create_branch(name, base)
+  if not ok then return nil, "failed to create branch: " .. (err or "") end
   return name, nil
 end
 
