@@ -4,22 +4,19 @@ local M = {}
 local parser = require("jiratui.parser")
 local notify = require("jiratui.util").notify
 
-function M.required_keys_present()
-  local path = require("jiratui.util").config_path()
-  local yaml_root, parse_error = parser.read_yaml_table(path)
-  if type(yaml_root) ~= "table" then return false, parse_error or ("cannot read: " .. tostring(path)) end
-  local missing = {}
-  if not yaml_root.jira_api_base_url or yaml_root.jira_api_base_url == "" then
-    table.insert(missing, "jira_api_base_url")
-  end
-  if not yaml_root.jira_api_username or yaml_root.jira_api_username == "" then
-    table.insert(missing, "jira_api_username")
-  end
-  if not yaml_root.jira_api_token or yaml_root.jira_api_token == "" then table.insert(missing, "jira_api_token") end
-  if #missing > 0 then return false, table.concat(missing, ", ") end
-  return true
+-- internal: repo name from current git worktree
+local function _current_repo_name()
+  local ok, toplevel = pcall(function() return vim.fn.systemlist({ "git", "rev-parse", "--show-toplevel" }) end)
+  if not ok or type(toplevel) ~= "table" or #toplevel == 0 then return nil end
+  local path = toplevel[1]
+  if not path or path == "" then return nil end
+  -- normalize separators
+  path = tostring(path):gsub("[\r\n]+$", "")
+  local name = path:match("([^/\\]+)$")
+  return name
 end
 
+-- internal: read YAML once
 local function read_yaml_config()
   local path = require("jiratui.util").config_path()
   local yaml_root, parse_error = parser.read_yaml_table(path)
@@ -60,11 +57,43 @@ local function read_yaml_config()
   return yaml_view, nil
 end
 
+-- public: verify YAML has required keys
+function M.required_keys_present()
+  local path = require("jiratui.util").config_path()
+  local yaml_root, parse_error = parser.read_yaml_table(path)
+  if type(yaml_root) ~= "table" then return false, parse_error or ("cannot read: " .. tostring(path)) end
+  local missing = {}
+  if not yaml_root.jira_api_base_url or yaml_root.jira_api_base_url == "" then
+    table.insert(missing, "jira_api_base_url")
+  end
+  if not yaml_root.jira_api_username or yaml_root.jira_api_username == "" then
+    table.insert(missing, "jira_api_username")
+  end
+  if not yaml_root.jira_api_token or yaml_root.jira_api_token == "" then table.insert(missing, "jira_api_token") end
+  if #missing > 0 then return false, table.concat(missing, ", ") end
+  return true
+end
+
+-- public: find JQL id by current repo name against YAML labels
+function M.find_jql_id_for_current_repo()
+  if not M._yaml_cache then M._yaml_cache = select(1, read_yaml_config()) or {} end
+  local repo = _current_repo_name()
+  if not repo or repo == "" then return nil, nil end
+  local wanted = repo:lower()
+  local map = (M._yaml_cache.pre_defined_jql_expressions or {})
+  for id, rec in pairs(map) do
+    local lbl = type(rec.label) == "string" and rec.label or ""
+    if lbl:lower() == wanted then return tonumber(id), repo end
+  end
+  return nil, repo
+end
+
 M.defaults = {
+  debug = false,
   disable_startup_notification = false,
   keymaps = true,
+  load_on_found_jql_id = false,
   load_on_startup = true,
-  debug = false,
 
   cache = {
     background_refresh = true,
@@ -74,19 +103,19 @@ M.defaults = {
   },
 
   git = {
-    enabled = true,
-    remote = "origin",
     branch_template = "{key}-{slug}",
     commit_template = "{key} {summary}",
+    enabled = true,
+    remote = "origin",
   },
 
   telescope = {
+    group_by = "none",
+    group_custom_fields = {}, -- Add custom group_by fields with { id = "customfield_XXXXX", name = "Custom" }
     picker_fields = { "key", "summary", "status", "assignee", "priority", "fixVersions" },
     preview_fields = { "description", "fixVersions" },
-    sort_by = "updated",
-    group_by = "none",
-    group_custom_fields = {},
     show_group_headers = true,
+    sort_by = "updated",
   },
 
   terminal = {
@@ -94,12 +123,12 @@ M.defaults = {
   },
 
   filters = {
-    project = nil,
     assignee = nil,
-    status = nil,
-    max_results = 100,
     day_interval = nil,
-    default_jql_id = nil,
+    default_jql_id = nil, -- -1 ⇒ auto from repo name
+    max_results = 100, -- -1 all results, >100 with pagination
+    project = nil,
+    status = nil,
   },
 }
 
@@ -131,6 +160,12 @@ function M.setup(user_options)
 
   if M.options.filters.default_jql_id == nil and yaml_view.default_jql_expression_id then
     M.options.filters.default_jql_id = yaml_view.default_jql_expression_id
+  end
+
+  -- resolve -1 ⇒ lookup by repo label
+  if M.options.filters.default_jql_id == -1 then
+    local found = select(1, M.find_jql_id_for_current_repo())
+    if found then M.options.filters.default_jql_id = found end
   end
 
   if M.options.debug and parse_error then

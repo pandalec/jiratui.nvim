@@ -31,6 +31,24 @@ function M.setup(user_options)
 
   local options = config_module.setup(user_options or {})
 
+  -- gating: enable only if repo label is found when configured
+  local found_jql_id, repo_name = config_module.find_jql_id_for_current_repo()
+
+  -- if user asked for auto default id, ensure set again here in case setup ran before git ready
+  if options.filters and options.filters.default_jql_id == -1 and found_jql_id then
+    options.filters.default_jql_id = found_jql_id
+  end
+
+  if options.load_on_found_jql_id then
+    if not found_jql_id then
+      if want_notifications then
+        local rn = repo_name or "current repository"
+        notify("jiratui.nvim disabled: no JQL label matching repo '" .. rn .. "'.", vim.log.levels.WARN)
+      end
+      return
+    end
+  end
+
   local telescope_ok, telescope_module, issues_ok, issues_module, terminal_ok, terminal_module = lazy_require_modules()
 
   vim.api.nvim_create_user_command("JiraTasks", function()

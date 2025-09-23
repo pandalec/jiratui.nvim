@@ -435,6 +435,7 @@ local function build_preview_lines(issue, preview_field_names, custom_id_to_name
     if field_name == "description" then
       local text = parser.adf_to_plain_text(issue.description)
       local description_lines = vim.split(text or "", "\n", { plain = true })
+      lines[#lines + 1] = "Description:"
       if #description_lines == 0 then description_lines = { "(no description)" } end
       for _, line in ipairs(description_lines) do
         lines[#lines + 1] = (line or ""):gsub("\r", "")
