@@ -46,7 +46,7 @@ Example (lazy.nvim):
       end,
     }
 
-Neovim 0.12 nightly — via vim.pack:
+Neovim 0.12 nightly - via vim.pack:
 
 >lua
     -- init.lua

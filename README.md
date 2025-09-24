@@ -1,10 +1,12 @@
 # jiratui.nvim
 
-Telescope-powered Jira picker for Neovim — list, preview, group, and open issues from your editor. Optional Git helpers let you create/switch branches and craft commit messages from issues.
+Telescope-powered Jira picker for Neovim - list, preview, group, and open issues from your editor. Optional Git helpers let you create/switch branches and craft commit messages from issues.
 
 > ⚠️ **Status**: pre-alpha. APIs and defaults may change.
 
 > 🙌 **Credits**: Built on the CLI **[whyisdifficult/jiratui](https://github.com/whyisdifficult/jiratui)** and reuses its YAML configuration (credentials and predefined JQL).
+
+For context, I've shared my `.dotfiles` [here](https://github.com/pandalec/dotfiles).
 
 ---
 
@@ -41,7 +43,7 @@ Telescope-powered Jira picker for Neovim — list, preview, group, and open issu
 
 - **Conditional activation**
   - `load_on_found_jql_id = true` activates the plugin **only** when the current Git repo name matches a JQL label in the YAML
-  - `disable_startup_notification` controls whether a “disabled” notice is shown
+  - `disable_startup_notification` controls whether a "disabled" notice is shown
 
 ---
 
@@ -63,7 +65,7 @@ This plugin reuses the jiratui YAML for credentials and predefined JQL.
 > Note: The Lazy.nvim example below is untested.  
 > Requires Neovim 0.12+ nightly for the `vim.pack` method.
 
-### Neovim 0.12 nightly — via `vim.pack`
+### Neovim 0.12 nightly - via `vim.pack`
 
 ```lua
 vim.pack.add({
@@ -125,8 +127,6 @@ pre_defined_jql_expressions:
     expression: project = "PROJ" ORDER BY updated DESC
 ```
 
-Refer to
-
 ### Plugin `setup()` options (defaults)
 
 ```lua
@@ -187,27 +187,27 @@ Refer to
 
 ### Commands
 
-- `:JiraTasks` — open the Telescope picker.
-- `:JiraTasksRefresh` — refresh the issues cache in the background.
+- `:JiraTasks` - open the Telescope picker.
+- `:JiraTasksRefresh` - refresh the issues cache in the background.
 
 > If `load_on_found_jql_id = true` and no matching JQL label for the current Git repo is found, the plugin is disabled and these commands are not created. Set `disable_startup_notification = true` to suppress the notice.
 
 ### Default keymaps (if `keymaps = true`)
 
 - Normal mode:
-  - `<leader>jj` — `:JiraTasks`
-  - `<leader>jr` — `:JiraTasksRefresh`
-  - `<leader>jt` — open external `jiratui` TUI for the configured `project` and `default_jql_id`
+  - `<leader>jj` - `:JiraTasks`
+  - `<leader>jr` - `:JiraTasksRefresh`
+  - `<leader>jt` - open external `jiratui` TUI for the configured `project` and `default_jql_id`
 
 - Inside the picker:
-  - `<CR>` — open external `jiratui` TUI for the selected issue
-  - `<C-o>` — open issue in browser
-  - `<C-r>` — refresh issues
-  - `<C-i>` / `<C-p>` — toggle preview
-  - `?` — help overlay
-  - `<C-g>` / `<C-S-g>` — cycle grouping forward/backward
-  - `<C-f>` — open value-filter menu for the **current group**
-  - `<C-b>` — create/switch Git branch from selected issue
+  - `<CR>` - open external `jiratui` TUI for the selected issue
+  - `<C-o>` - open issue in browser
+  - `<C-r>` - refresh issues
+  - `<C-i>` / `<C-p>` - toggle preview
+  - `?` - help overlay
+  - `<C-g>` / `<C-S-g>` - cycle grouping forward/backward
+  - `<C-f>` - open value-filter menu for the **current group**
+  - `<C-b>` - create/switch Git branch from selected issue
 
 ### Grouping and value filters
 

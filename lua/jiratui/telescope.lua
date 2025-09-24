@@ -507,7 +507,7 @@ local function toggle_help_overlay(prompt_bufnr)
   end
 
   local lines = {
-    "jiratui.nvim — Telescope",
+    "jiratui.nvim - Telescope",
     "",
     "Keymaps:",
     "<CR>      Open in jiratui (-w <KEY>)",
