@@ -3,6 +3,7 @@ local M = {}
 
 local notify = require("jiratui.util").notify
 local config = require("jiratui.config")
+local issues_module = require("jiratui.issues")
 
 local function get_opts()
   local opts = config.get() or {}
@@ -43,6 +44,64 @@ function M.slugify(text)
   -- keep it reasonably short
   if #text > 80 then text = text:sub(1, 80) end
   return (text == "" and "wip") or text
+end
+
+-- Current branch name
+local function current_branch_name()
+  local ok, out, err = system_git({ "rev-parse", "--abbrev-ref", "HEAD" })
+  if not ok then return nil, (err ~= "" and err or "cannot read current branch") end
+  return out, nil
+end
+
+local function current_upstream_ref()
+  -- returns "origin/main" or nil
+  local ok, out = system_git({ "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}" })
+  if ok and out ~= "" then return out end
+  return nil
+end
+
+local function unset_upstream_if_mismatch(branch, remote)
+  local up = current_upstream_ref()
+  if not up then return end
+  local expect = (remote or get_opts().remote) .. "/" .. branch
+  if up ~= expect then
+    -- remove accidental upstream (e.g. origin/main)
+    system_git({ "branch", "--unset-upstream" })
+  end
+end
+
+-- Extract Jira key like PROJ-123 from branch
+function M.extract_issue_key_from_branch(branch_name)
+  if type(branch_name) ~= "string" or branch_name == "" then return nil end
+  local key = branch_name:match("([A-Z][A-Z0-9]+%-%d+)")
+  return key
+end
+
+-- Find issue by key in cached issues
+local function find_issue_in_cache_by_key(issue_key)
+  for _, it in ipairs(issues_module.cached_issues or {}) do
+    if it.key == issue_key then return it end
+  end
+  return nil
+end
+
+-- Resolve issue by key using cache/disk, then async refresh if needed
+local function resolve_issue_by_key_sync(issue_key, timeout_ms)
+  local opts = config.get() or {}
+  -- try memory
+  local hit = find_issue_in_cache_by_key(issue_key)
+  if hit then return hit, nil end
+  -- try disk
+  issues_module.load_from_disk(opts)
+  hit = find_issue_in_cache_by_key(issue_key)
+  if hit then return hit, nil end
+  -- refresh from REST and wait
+  local done = false
+  issues_module.refresh_issues_async(opts, function() done = true end)
+  vim.wait(timeout_ms or 30000, function() return done end, 50)
+  hit = find_issue_in_cache_by_key(issue_key)
+  if hit then return hit, nil end
+  return nil, "issue " .. issue_key .. " not found in cache"
 end
 
 local function apply_template(tmpl, issue)
@@ -117,14 +176,45 @@ local function git_switch_track(branch, remote)
 end
 
 local function git_create_branch(branch, base)
+  local remote = get_opts().remote
+  -- Try to avoid auto-tracking remote base (origin/main) which confuses pushes.
   if base and base ~= "" then
-    local ok = system_git({ "switch", "-c", branch, base })
-    if ok then return true end
-    return system_git({ "checkout", "-b", branch, base })
+    local created = false
+
+    -- If base looks like a remote ref (e.g. origin/main), first try --no-track.
+    if base:match("^[%w._-]+/.+") then
+      created = system_git({ "switch", "-c", branch, "--no-track", base })
+      if not created then created = system_git({ "checkout", "-b", branch, "--no-track", base }) end
+    end
+
+    -- Fallback without --no-track
+    if not created then
+      created = system_git({ "switch", "-c", branch, base })
+      if not created then
+        local ok2, out2, err2 = system_git({ "checkout", "-b", branch, base })
+        if not ok2 then return ok2, out2, err2 end
+        created = ok2
+      end
+    end
+
+    if created then
+      unset_upstream_if_mismatch(branch, remote)
+      return true
+    end
+    -- should not reach here, but keep a safe fallback error
+    return false, "", "failed to create branch"
   else
     local ok = system_git({ "switch", "-c", branch })
-    if ok then return true end
-    return system_git({ "checkout", "-b", branch })
+    if not ok then
+      local ok2, out2, err2 = system_git({ "checkout", "-b", branch })
+      if not ok2 then return ok2, out2, err2 end
+      ok = ok2
+    end
+    if ok then
+      unset_upstream_if_mismatch(branch, remote)
+      return true
+    end
+    return false, "", "failed to create branch"
   end
 end
 
@@ -244,6 +334,47 @@ function M.ensure_and_switch(issue, opts)
   if not name then return nil, err end
   notify("Switched to " .. name)
   return name, nil
+end
+
+-- Build commit message from current branch using cached issues/rest pipeline
+function M.get_commit_message_from_branch(opts)
+  opts = opts or {}
+  if not M.is_enabled() then return nil, "git disabled or not available" end
+  local br, e1 = current_branch_name()
+  if not br then return nil, e1 end
+  local key = M.extract_issue_key_from_branch(br)
+  if not key then return nil, "no Jira key in branch: " .. br end
+  local issue, e2 = resolve_issue_by_key_sync(key, opts.timeout_ms or 30000)
+  if not issue then return nil, e2 end
+  local msg = M.compute_commit_message({ key = key, summary = issue.summary or "" }, opts.template)
+  return msg, nil
+end
+
+-- Create a commit using the computed message
+function M.commit_from_branch(opts)
+  opts = opts or {}
+  if not M.is_enabled() then return nil, "git disabled or not available" end
+  local msg, err = M.get_commit_message_from_branch(opts)
+  if not msg then return nil, err end
+  local args = { "commit", "-m", msg }
+  if opts.body and opts.body ~= "" then
+    table.insert(args, "-m")
+    table.insert(args, opts.body)
+  end
+  local ok, out, e = system_git(args)
+  if not ok then return nil, e ~= "" and e or out end
+  notify("Committed with message: " .. msg)
+  return out, nil
+end
+
+-- Helper for headless usage (e.g. from lazygit)
+function M.print_commit_message_from_branch()
+  local msg, err = M.get_commit_message_from_branch({})
+  if not msg then
+    io.stderr:write((err or "unknown error") .. "\n")
+    return
+  end
+  io.stdout:write(msg .. "\n")
 end
 
 return M
