@@ -50,12 +50,11 @@ Telescope-powered Jira picker for Neovim — list, preview, group, and open issu
 - Neovim ≥ 0.10
 - curl
 - yq
-- nvim-lua/plenary.nvim
 - nvim-telescope/telescope.nvim
-- akinsho/toggleterm.nvim (recommended)
-- whyisdifficult/jiratui CLI installed and configured
+- akinsho/toggleterm.nvim
+- whyisdifficult/jiratui installed and configured
 
-This plugin reuses the jiratui CLI YAML for credentials and predefined JQL.
+This plugin reuses the jiratui YAML for credentials and predefined JQL.
 
 ---
 
@@ -313,18 +312,6 @@ Validates:
 - **Picker columns empty for custom fields**
   - Put the field id in `telescope.picker_fields` and/or `telescope.preview_fields`.
   - For readable headers, add to `telescope.group_custom_fields`.
-
-- **UI echo error**
-  - Wrap custom notifications in `vim.schedule(function() ... end)`.
-
-## Roadmap
-
-- Persist value filters to disk
-- Inline transitions and assignments
-- PR creation and remote tracking helpers
-- Richer preview rendering
-- Retry and error surfacing
-- Tests and CI
 
 ## Contributing
 
