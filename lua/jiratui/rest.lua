@@ -187,34 +187,35 @@ local function compose_jql(opts)
   return merged
 end
 
-local function curl_json(args, cb)
+local function curl_json(url, body_tbl, cb)
   local _, ycfg = cfg()
   local ok, err = credentials_ok()
   if not ok then return cb(nil, err) end
 
+  local body = vim.json.encode(body_tbl or {})
   local cmd = {
     "curl",
     "-sS",
     "-u", string.format("%s:%s", ycfg.email, ycfg.token),
     "-H", "Accept: application/json",
     "-H", "Content-Type: application/json",
-    "-G",
+    "-X", "POST",
+    url,
+    "--data-binary", "@" .. "-", -- read body from stdin
   }
-  for _, a in ipairs(args) do cmd[#cmd + 1] = a end
 
-  vim.system(cmd, { text = true }, function(res)
-    local body = res.stdout or ""
-    local okj, decoded = pcall(vim.json.decode, body)
+  -- feed JSON via stdin
+  vim.system(cmd, { text = true, stdin = body }, function(res)
+    local raw = res.stdout or ""
+    local okj, decoded = pcall(vim.json.decode, raw)
     if okj and type(decoded) == "table" then
-      local em = decoded.errorMessages
-      if type(em) == "table" and #em > 0 then
-        return cb(nil, table.concat(em, "; "))
+      if type(decoded.errorMessages) == "table" and #decoded.errorMessages > 0 then
+        return cb(nil, table.concat(decoded.errorMessages, "; "))
       end
       return cb(decoded, nil)
     end
-    -- Fallbacks
     if res.code ~= 0 then
-      local msg = (res.stderr and res.stderr ~= "" and res.stderr) or body or "curl error"
+      local msg = (res.stderr and res.stderr ~= "" and res.stderr) or raw or "curl error"
       return cb(nil, ("curl failed (%d): %s"):format(res.code, msg))
     end
     return cb(nil, "Invalid JSON from Jira")
@@ -272,28 +273,22 @@ local function search_page(opts, start_at, page_size, cb)
   local jql = compose_jql(opts)
   local fields = pick_requested_fields(opts)
 
-  local args = {
-    string.format("%s/rest/api/3/search", base_url()),
-    "-d",
-    "startAt=" .. tostring(start_at),
-    "-d",
-    "maxResults=" .. tostring(page_size),
-    "-d",
-    "fields=" .. table.concat(fields, ","),
+  local url = string.format("%s/rest/api/3/search/jql", base_url())
+  local body = {
+    jql = jql and urlencode_jql(jql) or "",
+    startAt = start_at,
+    maxResults = page_size,
+    fields = fields,
   }
-  if jql and jql ~= "" then
-    args[#args + 1] = "--data-urlencode"
-    args[#args + 1] = "jql=" .. urlencode_jql(jql)
-  end
 
   if debug_on then
-    local jql_display = (jql and jql ~= "") and jql or "<none>"
-    vim.schedule(
-      function() notify(("GET /search startAt=%d maxResults=%d jql=%s"):format(start_at, page_size, jql_display)) end
-    )
+    local jql_display = (body.jql ~= "" and body.jql) or "<none>"
+    vim.schedule(function()
+      notify(("POST /search/jql startAt=%d maxResults=%d jql=%s"):format(start_at, page_size, jql_display))
+    end)
   end
 
-  curl_json(args, cb)
+  curl_json(url, body, cb)
 end
 
 function M.fetch_issues(opts, cb)
