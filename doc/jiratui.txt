@@ -21,10 +21,9 @@ REQUIREMENTS                                                      *jiratui.nvim-
 
 - Neovim >= 0.10
 - telescope.nvim
-- plenary.nvim
 - toggleterm.nvim (for opening the external `jiratui` TUI)
 - curl (HTTP)
-- yq   (parse YAML used by `jiratui`)
+- yq (parse YAML used by `jiratui`)
 - jiratui (CLI) configured
 
 
@@ -39,7 +38,6 @@ Example (lazy.nvim):
     {
       "pandalec/jiratui.nvim",
       dependencies = {
-        "nvim-lua/plenary.nvim",
         "nvim-telescope/telescope.nvim",
         "akinsho/toggleterm.nvim",
       },
@@ -53,12 +51,11 @@ Neovim 0.12 nightly — via vim.pack:
 >lua
     -- init.lua
     vim.pack.add({
-      { src = "https://github.com/nvim-lua/plenary.nvim" },
       { src = "https://github.com/nvim-telescope/telescope.nvim" },
       { src = "https://github.com/akinsho/toggleterm.nvim" },
       { src = "https://github.com/pandalec/jiratui.nvim" },
     })
-    -- Optional: :lua vim.pack.update({ "plenary.nvim", "telescope.nvim", "toggleterm.nvim", "jiratui.nvim" })
+
     require("jiratui").setup({})
 
 
