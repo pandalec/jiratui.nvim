@@ -126,8 +126,7 @@ end
 
 local function urlencode_jql(s)
   s = tostring(s or "")
-  s = s:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
-  return s
+  return (s:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
 local function split_order_clause(jql)
@@ -196,15 +195,19 @@ local function curl_json(url, body_tbl, cb)
   local cmd = {
     "curl",
     "-sS",
-    "-u", string.format("%s:%s", ycfg.email, ycfg.token),
-    "-H", "Accept: application/json",
-    "-H", "Content-Type: application/json",
-    "-X", "POST",
+    "-u",
+    string.format("%s:%s", ycfg.email, ycfg.token),
+    "-H",
+    "Accept: application/json",
+    "-H",
+    "Content-Type: application/json",
+    "-X",
+    "POST",
     url,
-    "--data-binary", "@" .. "-", -- read body from stdin
+    "--data-binary",
+    "@" .. "-",
   }
 
-  -- feed JSON via stdin
   vim.system(cmd, { text = true, stdin = body }, function(res)
     local raw = res.stdout or ""
     local okj, decoded = pcall(vim.json.decode, raw)
@@ -268,24 +271,32 @@ local function requested_custom_id_set(opts)
   return ids
 end
 
-local function search_page(opts, start_at, page_size, cb)
+local function search_page(opts, next_token, page_size, cb)
   local debug_on = opts.debug == true
   local jql = compose_jql(opts)
   local fields = pick_requested_fields(opts)
 
   local url = string.format("%s/rest/api/3/search/jql", base_url())
   local body = {
-    jql = jql and urlencode_jql(jql) or "",
-    startAt = start_at,
-    maxResults = page_size,
     fields = fields,
+    maxResults = page_size,
   }
+  if jql and jql ~= "" then body.jql = urlencode_jql(jql) end
+  if next_token and next_token ~= "" then body.nextPageToken = next_token end
 
   if debug_on then
-    local jql_display = (body.jql ~= "" and body.jql) or "<none>"
-    vim.schedule(function()
-      notify(("POST /search/jql startAt=%d maxResults=%d jql=%s"):format(start_at, page_size, jql_display))
-    end)
+    local jql_display = (body.jql and body.jql ~= "" and body.jql) or "<none>"
+    vim.schedule(
+      function()
+        notify(
+          ("POST /search/jql maxResults=%d nextPageToken=%s jql=%s"):format(
+            page_size,
+            tostring(next_token or "nil"),
+            jql_display
+          )
+        )
+      end
+    )
   end
 
   curl_json(url, body, cb)
@@ -297,10 +308,10 @@ function M.fetch_issues(opts, cb)
 
   local target = (options.filters and options.filters.max_results) or 100
   local should_paginate = (target == -1) or (target and target > 100)
+  local page_size = (not should_paginate) and (target or 100) or 100
 
   if not should_paginate then
-    local page_size = target or 100
-    search_page(options, 0, page_size, function(json, err)
+    search_page(options, nil, page_size, function(json, err)
       if err then return cb(nil, err) end
       local out = {}
       for _, raw in ipairs(json.issues or {}) do
@@ -311,22 +322,21 @@ function M.fetch_issues(opts, cb)
     return
   end
 
-  local collected, start_at, page_size = {}, 0, 100
-  local total = nil
+  local collected, next_token = {}, nil
 
   local function step()
-    search_page(options, start_at, page_size, function(json, err)
+    search_page(options, next_token, page_size, function(json, err)
       if err then return cb(nil, err) end
-      local issues = json.issues or {}
-      total = tonumber(json.total or 0) or 0
 
-      for _, raw in ipairs(issues) do
+      for _, raw in ipairs(json.issues or {}) do
         collected[#collected + 1] = normalize_issue(raw, custom_ids)
       end
 
-      start_at = start_at + #issues
+      next_token = json.nextPageToken
+      local is_last = json.isLast == true or not next_token
       local have_enough = (target ~= -1) and (#collected >= target)
-      if #issues == 0 or start_at >= total or have_enough then
+
+      if is_last or have_enough then
         if target ~= -1 and #collected > target then
           while #collected > target do
             table.remove(collected)
