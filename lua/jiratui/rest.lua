@@ -124,7 +124,11 @@ local function pick_requested_fields(opts)
   return list
 end
 
-local function urlencode_jql(s) return s end
+local function urlencode_jql(s)
+  s = tostring(s or "")
+  s = s:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+  return s
+end
 
 local function split_order_clause(jql)
   if not jql or jql == "" then return nil, nil end
@@ -191,24 +195,29 @@ local function curl_json(args, cb)
   local cmd = {
     "curl",
     "-sS",
-    "-f",
-    "-u",
-    string.format("%s:%s", ycfg.email, ycfg.token),
-    "-H",
-    "Accept: application/json",
-    "-H",
-    "Content-Type: application/json",
+    "-u", string.format("%s:%s", ycfg.email, ycfg.token),
+    "-H", "Accept: application/json",
+    "-H", "Content-Type: application/json",
     "-G",
   }
-  for _, a in ipairs(args) do
-    cmd[#cmd + 1] = a
-  end
+  for _, a in ipairs(args) do cmd[#cmd + 1] = a end
 
   vim.system(cmd, { text = true }, function(res)
-    if res.code ~= 0 then return cb(nil, string.format("curl failed (%d): %s", res.code, res.stderr or "")) end
-    local okj, decoded = pcall(vim.json.decode, res.stdout or "")
-    if not okj then return cb(nil, "Invalid JSON from Jira") end
-    cb(decoded, nil)
+    local body = res.stdout or ""
+    local okj, decoded = pcall(vim.json.decode, body)
+    if okj and type(decoded) == "table" then
+      local em = decoded.errorMessages
+      if type(em) == "table" and #em > 0 then
+        return cb(nil, table.concat(em, "; "))
+      end
+      return cb(decoded, nil)
+    end
+    -- Fallbacks
+    if res.code ~= 0 then
+      local msg = (res.stderr and res.stderr ~= "" and res.stderr) or body or "curl error"
+      return cb(nil, ("curl failed (%d): %s"):format(res.code, msg))
+    end
+    return cb(nil, "Invalid JSON from Jira")
   end)
 end
 
